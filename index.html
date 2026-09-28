@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>Physical Execution | Workout Log</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Inter:wght@400;600;800&display=swap');
+    body { font-family: 'Inter', sans-serif; }
+    .mono { font-family: 'JetBrains Mono', monospace; }
+  </style>
+</head>
+<body class="bg-black text-zinc-100 min-h-screen flex flex-col items-center p-4">
+
+  <main class="w-full max-w-md my-4 space-y-5">
+    
+    <!-- Header -->
+    <header class="border-b border-zinc-900 pb-3 flex justify-between items-baseline">
+      <div>
+        <h1 class="text-[10px] font-bold uppercase tracking-[0.25em] text-zinc-500">PHYSICAL PROTOCOL</h1>
+        <div class="text-xl font-extrabold tracking-tight text-white">WORKOUT LOG</div>
+      </div>
+      <div id="todayDate" class="mono text-xs text-zinc-500">2026-09-28</div>
+    </header>
+
+    <!-- Metrics Scoreboard -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
+        <span class="text-[10px] mono uppercase tracking-wider text-zinc-500 block">Total Workouts</span>
+        <div class="flex items-baseline gap-1 mt-1">
+          <span id="totalWorkouts" class="text-4xl font-extrabold tracking-tight text-zinc-100 mono">0</span>
+          <span class="text-xs text-zinc-500">SESI</span>
+        </div>
+      </div>
+      <div class="bg-zinc-950 border border-zinc-900 rounded-2xl p-4">
+        <span class="text-[10px] mono uppercase tracking-wider text-zinc-500 block">Status Hari Ini</span>
+        <div class="mt-2">
+          <span id="todayStatusBadge" class="text-[11px] mono font-bold px-2.5 py-1 rounded-full bg-zinc-900 text-zinc-500 border border-zinc-800">
+            REST / BELUM
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Freeform Universal Input -->
+    <section class="bg-zinc-950 border border-zinc-900 rounded-2xl p-5 space-y-4">
+      <div class="flex justify-between items-center">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-zinc-300 mono">Log Sesi Hari Ini</h2>
+        <span class="text-[10px] mono text-zinc-600">INPUT BEBAS</span>
+      </div>
+
+      <!-- Nama / Tajuk Workout -->
+      <div class="space-y-1">
+        <label class="text-[11px] mono uppercase text-zinc-500">Fokus / Tajuk Latihan</label>
+        <input type="text" id="workoutTitle" placeholder="Cth: Dumbbell Chest & Biceps / 5KM Larian Padang Polo"
+          class="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm text-zinc-100 placeholder:text-zinc-700 focus:outline-none focus:border-zinc-500">
+      </div>
+
+      <!-- Perincian Sets/Reps/Pace/Beban -->
+      <div class="space-y-1">
+        <label class="text-[11px] mono uppercase text-zinc-500">Perincian / Catatan Sesi</label>
+        <textarea id="workoutDetails" rows="4" 
+          placeholder="Cth:&#10;- Incline DB Press 16kg (4x10)&#10;- Bicep Curls 12kg (3x12)&#10;- Lateral Raise 8kg (4x15)&#10;Teknik kemas, rehat 90s."
+          class="w-full bg-black border border-zinc-800 rounded-xl p-3 text-xs mono text-zinc-200 placeholder:text-zinc-700 focus:outline-none focus:border-zinc-500 resize-none leading-relaxed"></textarea>
+      </div>
+
+      <!-- Pilihan: Tempoh Masa (Minit) -->
+      <div class="space-y-1">
+        <label class="text-[11px] mono uppercase text-zinc-500">Tempoh (Minit - Pilihan)</label>
+        <input type="number" id="workoutDuration" placeholder="45"
+          class="w-full bg-black border border-zinc-800 rounded-xl p-3 text-sm mono text-zinc-100 placeholder:text-zinc-700 focus:outline-none focus:border-zinc-500">
+      </div>
+
+      <button id="saveBtn" onclick="submitWorkout()"
+        class="w-full py-4 bg-zinc-100 hover:bg-white active:scale-[0.98] transition font-extrabold text-black rounded-xl text-xs uppercase tracking-widest mono shadow-lg shadow-zinc-950">
+        Simpan Workout Selesai
+      </button>
+    </section>
+
+    <!-- Execution History -->
+    <section class="space-y-2">
+      <div class="flex justify-between items-center text-xs uppercase tracking-wider mono text-zinc-500">
+        <span>Log Latihan Lepas</span>
+        <button onclick="loadWorkouts()" class="hover:text-zinc-300">Sync 🔄</button>
+      </div>
+      <div id="workoutList" class="space-y-2.5 max-h-80 overflow-y-auto pr-1 text-xs">
+        <p class="text-zinc-700 text-center py-4 mono">Memuat rekod latihan...</p>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    const SUPABASE_URL = "https://jrbbiqchqahyjhkxqmgr.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_5NR1DcL0YZ1Z5416-kX_2w_f8la6ycO";
+    const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    function getTodayString() {
+      const now = new Date();
+      const yyyy = now.getFullYear();
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    const todayStr = getTodayString();
+    document.getElementById('todayDate').innerText = todayStr;
+
+    async function loadWorkouts() {
+      const { data, error } = await db
+        .from('workout_logs')
+        .select('*')
+        .order('workout_date', { ascending: false })
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      const logs = data || [];
+      document.getElementById('totalWorkouts').innerText = logs.length;
+
+      // Semak status hari ini
+      const isTodayDone = logs.some(l => l.workout_date === todayStr);
+      const statusBadge = document.getElementById('todayStatusBadge');
+
+      if (isTodayDone) {
+        statusBadge.innerText = "DONE (EXECUTED)";
+        statusBadge.className = "text-[11px] mono font-bold px-2.5 py-1 rounded-full bg-emerald-950/60 text-emerald-400 border border-emerald-800";
+      } else {
+        statusBadge.innerText = "REST / BELUM";
+        statusBadge.className = "text-[11px] mono font-bold px-2.5 py-1 rounded-full bg-zinc-900 text-zinc-500 border border-zinc-800";
+      }
+
+      // Senaraikan Log
+      const listEl = document.getElementById('workoutList');
+      if (logs.length === 0) {
+        listEl.innerHTML = `<p class="text-zinc-700 text-center py-4 mono">Belum ada latihan direkodkan.</p>`;
+        return;
+      }
+
+      listEl.innerHTML = logs.map(item => `
+        <div class="p-4 bg-zinc-950 border border-zinc-900 rounded-xl space-y-2">
+          <div class="flex justify-between items-baseline border-b border-zinc-900/80 pb-2">
+            <span class="font-extrabold text-zinc-200 text-sm tracking-tight">${item.workout_title}</span>
+            <div class="text-[10px] mono text-zinc-500 flex items-center gap-2">
+              ${item.duration_minutes ? `<span>${item.duration_minutes}m</span>` : ''}
+              <span>${item.workout_date}</span>
+            </div>
+          </div>
+          <div class="text-zinc-400 mono text-xs whitespace-pre-line leading-relaxed">${item.workout_details}</div>
+        </div>
+      `).join('');
+    }
+
+    async function submitWorkout() {
+      const titleInput = document.getElementById('workoutTitle');
+      const detailsInput = document.getElementById('workoutDetails');
+      const durationInput = document.getElementById('workoutDuration');
+      const btn = document.getElementById('saveBtn');
+
+      const title = titleInput.value.trim();
+      const details = detailsInput.value.trim();
+      const duration = parseInt(durationInput.value) || 0;
+
+      if (!title || !details) {
+        alert("Sila masukkan tajuk latihan dan sedikit perincian sesi.");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = "Saving Execution...";
+
+      const { error } = await db
+        .from('workout_logs')
+        .insert([{
+          workout_title: title,
+          workout_details: details,
+          duration_minutes: duration,
+          workout_date: todayStr
+        }]);
+
+      if (error) {
+        alert("Ralat simpan: " + error.message);
+        btn.disabled = false;
+        btn.innerText = "Simpan Workout Selesai";
+      } else {
+        titleInput.value = "";
+        detailsInput.value = "";
+        durationInput.value = "";
+        btn.disabled = false;
+        btn.innerText = "Simpan Workout Selesai";
+        await loadWorkouts();
+      }
+    }
+
+    loadWorkouts();
+  </script>
+</body>
+</html>
